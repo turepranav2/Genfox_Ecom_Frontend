@@ -1,0 +1,951 @@
+BACKEND IMPROVEMENTS PROMPT — Paste this in your backend VS Code AI chat
+==========================================================================
+
+Go through the entire backend codebase and implement ALL of the following improvements. Every change must be production-ready, properly error-handled, and follow the existing code patterns.
+
+---
+
+## 1. CRITICAL BUG — POST /api/orders returns 500 "Product not found"
+
+When a user places an order via `POST /api/orders`, the backend responds with 500 "Product not found". The frontend sends the correct payload:
+
+```json
+{
+  "items": [{ "productId": "PRODUCT_MONGO_ID", "quantity": 2 }],
+  "address": "Pune, Maharashtra"
+}
+```
+
+Debug this flow:
+- Verify that `productId` lookup uses `findById()` with the correct MongoDB ObjectId.
+- If the cart stores productIds as strings, ensure they are cast to ObjectId before `.findById()`.
+- After placing an order, clear the user's cart automatically.
+- Return the created order object in the response (including `_id`, `items`, `total`, `status`, `createdAt`).
+
+---
+
+## 2. MISSING — GET /api/products/supplier (Supplier's own products)
+
+The frontend calls `GET /api/products/supplier` with the supplier's JWT token to list only that supplier's products. If this endpoint doesn't exist, create it:
+
+```
+GET /api/products/supplier
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+- Filter products where `supplierId` matches the authenticated supplier's ID from the token.
+- Return an array of products.
+
+---
+
+## 3. MISSING — Supplier Profile Endpoints
+
+The frontend expects these two endpoints for the supplier profile page:
+
+```
+GET /api/supplier/profile
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+Response should return:
+```json
+{
+  "supplier": {
+    "name": "ABC Traders",
+    "email": "abc@gmail.com",
+    "phone": "+91 9876543210",
+    "gstin": "29ABCDE1234F1Z5",
+    "address": "123 MG Road, Bengaluru",
+    "bankDetails": {
+      "accountHolderName": "ABC Traders",
+      "accountNumber": "1234567890",
+      "ifscCode": "SBIN0001234",
+      "bankName": "State Bank of India"
+    }
+  }
+}
+```
+
+```
+PUT /api/supplier/profile
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+Body:
+```json
+{
+  "name": "Updated Name",
+  "phone": "+91 9999999999",
+  "gstin": "NEW_GSTIN",
+  "address": "New Address",
+  "bankDetails": {
+    "accountHolderName": "Name",
+    "accountNumber": "123456",
+    "ifscCode": "IFSC123",
+    "bankName": "Bank Name"
+  }
+}
+```
+
+- Email should NOT be updatable.
+- Add `phone`, `gstin`, `address`, and `bankDetails` fields to the Supplier model if they don't exist.
+
+---
+
+## 4. MISSING — Supplier Payment Endpoints
+
+The frontend expects these endpoints for the supplier payments page:
+
+```
+GET /api/supplier/payments/summary
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+Response:
+```json
+{
+  "totalRevenue": 50000,
+  "commissionPaid": 5000,
+  "netEarnings": 45000,
+  "pendingPayout": 10000
+}
+```
+
+```
+GET /api/supplier/payments/transactions
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+Response:
+```json
+[
+  {
+    "_id": "...",
+    "type": "ORDER_PAYMENT",
+    "amount": 5000,
+    "status": "COMPLETED",
+    "orderId": "...",
+    "createdAt": "2026-01-15T10:00:00Z"
+  }
+]
+```
+
+- Calculate revenue from delivered orders belonging to this supplier.
+- Commission = 10% of revenue (or whatever the platform rate is).
+- Transactions can be derived from orders for now.
+
+---
+
+## 5. MISSING — Supplier Order Status Update
+
+The frontend calls:
+```
+PUT /api/orders/supplier/:orderId/status
+Authorization: Bearer SUPPLIER_JWT_TOKEN
+```
+
+Body:
+```json
+{ "status": "SHIPPED" }
+```
+
+- Only allow suppliers to update status of orders that contain their products.
+- Allowed transitions: PENDING → PROCESSING → SHIPPED → DELIVERED.
+- Don't allow skipping statuses or going backwards.
+
+---
+
+## 6. MISSING — Admin Delete User
+
+```
+DELETE /api/admin/users/:userId
+Authorization: Bearer ADMIN_JWT_TOKEN
+```
+
+- Delete the user and optionally cancel their pending orders.
+- Return `{ "message": "User deleted successfully" }`.
+
+---
+
+## 7. MISSING — Admin Get All Users
+
+```
+GET /api/admin/users
+Authorization: Bearer ADMIN_JWT_TOKEN
+```
+
+- Return all users (role = USER) with fields: `_id`, `name`, `email`, `role`, `createdAt`.
+- Exclude password from the response.
+
+---
+
+## 8. Product Image Validation
+
+When creating/updating products, validate that image URLs are proper absolute URLs (starting with http:// or https://). Currently suppliers can save `"img1.jpg"` which causes 404s on the frontend.
+
+Add validation in the product create/update routes:
+```js
+if (images && images.length > 0) {
+  for (const img of images) {
+    if (!img.startsWith('http://') && !img.startsWith('https://')) {
+      return res.status(400).json({ message: 'Image URLs must be absolute URLs (starting with http:// or https://)' })
+    }
+  }
+}
+```
+
+---
+
+## 9. Consistent _id to id Mapping
+
+The frontend Product/Order interfaces expect an `id` field, but MongoDB returns `_id`. Either:
+- Add a `toJSON` transform on all Mongoose schemas to map `_id` → `id`:
+```js
+schema.set('toJSON', {
+  virtuals: true,
+  transform: (doc, ret) => {
+    ret.id = ret._id.toString()
+    delete ret.__v
+    return ret
+  }
+})
+```
+- OR ensure all response objects include both `_id` and `id`.
+
+Apply this to ALL models: User, Supplier, Product, Order, Cart.
+
+---
+
+## 10. Supplier Model — Add Missing Fields
+
+Add these fields to the Supplier schema if they don't exist:
+
+```js
+phone: { type: String, default: '' },
+gstin: { type: String, default: '' },
+address: { type: String, default: '' },
+bankDetails: {
+  accountHolderName: { type: String, default: '' },
+  accountNumber: { type: String, default: '' },
+  ifscCode: { type: String, default: '' },
+  bankName: { type: String, default: '' }
+}
+```
+
+---
+
+## 11. Order Response — Populate Product Details
+
+When returning orders (for user, supplier, or admin), populate the product details in each order item:
+
+```js
+Order.find({ userId })
+  .populate('items.productId', 'name price images')
+  .sort({ createdAt: -1 })
+```
+
+Map the populated field so each item includes:
+```json
+{
+  "productId": "...",
+  "quantity": 2,
+  "price": 79999,
+  "product": {
+    "name": "iPhone 15",
+    "images": ["https://..."]
+  }
+}
+```
+
+---
+
+## 12. Cart Cleanup After Order
+
+After a successful order placement in `POST /api/orders`:
+- Clear the user's cart: `await Cart.findOneAndDelete({ userId })` or `await Cart.findOneAndUpdate({ userId }, { items: [] })`.
+
+---
+
+## 13. User Register — Return Proper Response
+
+`POST /api/auth/register` should:
+- Check if email already exists and return `400 { "message": "Email already registered" }`.
+- Hash the password with bcrypt before saving.
+- Return `{ "message": "User registered successfully" }`.
+
+---
+
+## 14. Security Improvements
+
+- Add rate limiting on auth routes (login/register) to prevent brute force:
+  ```
+  npm install express-rate-limit
+  ```
+  Apply 5 requests per minute on `/api/auth/login`, `/api/supplier/auth/login`, `/api/admin/login`.
+
+- Add `helmet` middleware for security headers:
+  ```
+  npm install helmet
+  ```
+
+- Ensure CORS is properly configured to only allow the frontend origin in production.
+
+---
+
+## 15. Admin Dashboard Response
+
+`GET /api/dashboard/admin` should return:
+```json
+{
+  "totalUsers": 10,
+  "totalSuppliers": 5,
+  "totalOrders": 50,
+  "totalRevenue": 500000,
+  "pendingSuppliers": 2,
+  "recentOrders": [
+    {
+      "_id": "...",
+      "total": 5000,
+      "status": "PENDING",
+      "createdAt": "...",
+      "userId": { "name": "Rahul", "email": "rahul@email.com" }
+    }
+  ]
+}
+```
+
+Populate `userId` in recent orders with `name` and `email`.
+
+---
+
+## SUMMARY OF NEW ROUTES NEEDED
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | /api/upload | Any authenticated | Upload image to Cloudinary |
+| GET | /api/products/supplier | Supplier | Get supplier's own products |
+| GET | /api/supplier/profile | Supplier | Get supplier profile |
+| PUT | /api/supplier/profile | Supplier | Update supplier profile |
+| GET | /api/supplier/payments/summary | Supplier | Payment summary |
+| GET | /api/supplier/payments/transactions | Supplier | Payment transactions |
+| PUT | /api/orders/supplier/:id/status | Supplier | Update order status |
+| GET | /api/admin/users | Admin | Get all users |
+| DELETE | /api/admin/users/:id | Admin | Delete a user |
+
+Make sure every new route has proper JWT authentication middleware, input validation, and error handling. All responses should follow the same JSON format used in existing routes.
+
+---
+
+## 16. CRITICAL — Cloudinary Image Upload Endpoint
+
+The frontend uses a file upload button (via `<input type="file">`) when suppliers add/edit products. It sends the file as multipart/form-data to the backend, which must handle upload to Cloudinary and return the URL.
+
+### Required packages:
+```bash
+npm install cloudinary multer multer-storage-cloudinary
+```
+
+### Environment variables (add to .env):
+```
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+### Cloudinary config (e.g. `src/config/cloudinary.ts`):
+```ts
+import { v2 as cloudinary } from 'cloudinary'
+import { CloudinaryStorage } from 'multer-storage-cloudinary'
+import multer from 'multer'
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'genfox-products',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 800, height: 800, crop: 'limit', quality: 'auto' }],
+  } as any,
+})
+
+export const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }) // 5MB limit
+export { cloudinary }
+```
+
+### Upload route (e.g. `src/routes/upload.ts`):
+```
+POST /api/upload
+Authorization: Bearer ANY_JWT_TOKEN
+Content-Type: multipart/form-data
+Field name: "image"
+```
+
+**Route handler:**
+```ts
+import { upload } from '../config/cloudinary'
+
+router.post('/api/upload', authMiddleware, upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No image file provided' })
+  }
+  // multer-storage-cloudinary puts the URL in req.file.path
+  res.json({ url: (req.file as any).path })
+})
+```
+
+**Response:**
+```json
+{
+  "url": "https://res.cloudinary.com/your_cloud/image/upload/v123/genfox-products/abc123.jpg"
+}
+```
+
+The frontend calls `POST /api/upload` for each image file the supplier selects, then includes the returned Cloudinary URLs in the product create/update payload. This replaces the old manual URL input approach and ensures all images are properly hosted.
+
+---
+
+## 17. CRITICAL BUG — Product slug_1 unique index causes 500 on product creation
+
+When a supplier creates a product via `POST /api/products`, MongoDB throws:
+
+```
+MongoServerError: E11000 duplicate key error collection: test.products index: slug_1 dup key: { slug: null }
+```
+
+The Product model has a unique index on `slug`, but no slug is being generated when creating products. Since the frontend does NOT send a `slug` field, every new product gets `slug: null`, and the second product onwards fails because `null` is already taken.
+
+**Fix options (pick one):**
+
+### Option A — Auto-generate slug from product name (recommended):
+```js
+// In the Product model pre-save hook or in the create route:
+const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+
+// Before saving:
+if (!product.slug) {
+  product.slug = slugify(product.name) + '-' + Date.now()
+}
+```
+
+### Option B — Drop the slug index entirely:
+```js
+// Run in MongoDB shell:
+db.products.dropIndex("slug_1")
+
+// And remove `slug` from the Product schema, or make it optional + non-unique:
+slug: { type: String, default: null }  // remove `unique: true`
+```
+
+Either way, product creation is currently **completely broken** — this must be fixed first.
+
+---
+
+## 18. CONFIRMED — Admin order status update should NOT exist
+
+The frontend previously called `PUT /api/orders/admin/:orderId/status` to let admin change order status. This has been **removed from the frontend** because order status should ONLY be changeable by the supplier who fulfills the order.
+
+**Action**: You may keep the admin status update endpoint in the backend for emergency use, but it is NOT used by the frontend anymore. Only the supplier endpoint `PUT /api/orders/supplier/:orderId/status` should be the primary way to change order status.
+
+---
+
+## 19. Order Response — Include Supplier Details
+
+When the admin fetches all orders via `GET /api/orders/admin`, the response should populate supplier details for each order item so the admin can see which supplier is responsible.
+
+```js
+Order.find({})
+  .populate('userId', 'name email')
+  .populate('items.productId', 'name price images supplierId')
+  .populate({
+    path: 'items.productId',
+    populate: { path: 'supplierId', select: 'name email' }
+  })
+  .sort({ createdAt: -1 })
+```
+
+Each order item should include supplier info:
+```json
+{
+  "product": {
+    "name": "iPhone 15",
+    "images": ["https://..."],
+    "supplier": {
+      "name": "ABC Traders",
+      "email": "abc@gmail.com"
+    }
+  }
+}
+```
+
+This is needed so the admin can see which supplier handles each order, without having the ability to change order status.
+
+---
+
+## 20. CONFIRMED 404s FROM LIVE TESTING
+
+The following endpoints were confirmed to return 404 during real testing with the frontend. These are the missing routes from the summary table above, re-confirmed:
+
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| GET /api/admin/users | 404 | Admin users page can't load |
+| GET /api/products/supplier | 404 | Supplier can't see their own products |
+| POST /api/upload | 404 | Image upload doesn't work |
+| GET /api/supplier/profile | 404 | Supplier profile page can't load |
+| POST /api/supplier/auth/login | 404 (intermittent) | Sometimes works, sometimes doesn't — check route registration |
+
+Priority: Fix items 17 (slug), 2 (supplier products), and 1 (order creation) first — these block core workflows.
+
+---
+
+## UPDATED SUMMARY OF ALL ROUTES NEEDED
+
+| Method | Endpoint | Auth | Description | Priority |
+|--------|----------|------|-------------|----------|
+| POST | /api/upload | Any authenticated | Upload image to Cloudinary | HIGH |
+| GET | /api/products/supplier | Supplier | Get supplier's own products | HIGH |
+| GET | /api/supplier/profile | Supplier | Get supplier profile | MEDIUM |
+| PUT | /api/supplier/profile | Supplier | Update supplier profile | MEDIUM |
+| GET | /api/supplier/payments/summary | Supplier | Payment summary | LOW |
+| GET | /api/supplier/payments/transactions | Supplier | Payment transactions | LOW |
+| PUT | /api/orders/supplier/:id/status | Supplier | Update order status | HIGH |
+| GET | /api/admin/users | Admin | Get all users | MEDIUM |
+| DELETE | /api/admin/users/:id | Admin | Delete a user | LOW |
+| PUT | /api/orders/supplier/:id/deliver | Supplier | Confirm delivery + cash | HIGH |
+| PUT | /api/orders/:id/confirm-receipt | User | Confirm order receipt | HIGH |
+
+---
+
+## 21. DELIVERY CONFIRMATION + CASH COLLECTION FLOW (COD)
+
+The frontend now implements a full delivery cross-check flow for Cash on Delivery orders:
+
+### Flow:
+1. Supplier changes order status to "DELIVERED" → opens confirmation dialog
+2. Supplier must check two boxes: "Order delivered" + "Cash collected (₹amount)"
+3. Backend sets: `deliveryConfirmation.supplierConfirmed = true`, 
+   `deliveryConfirmation.cashCollected = amount`, `deliveryConfirmation.deliveredAt = Date.now()`,
+   and `status = 'DELIVERED'`, `paymentStatus = 'PAID'`
+4. User sees "Confirm Receipt" button on their orders page for DELIVERED orders
+5. User confirms receipt → backend sets `deliveryConfirmation.userConfirmed = true`,
+   `deliveryConfirmation.userConfirmedAt = Date.now()`
+6. Once both `supplierConfirmed` and `userConfirmed` are true, the order is fully verified
+
+### New endpoints needed:
+
+**PUT /api/orders/supplier/:id/deliver**
+- Auth: Supplier (must own this order's items)
+- Body: `{ cashCollected: Number, supplierConfirmed: Boolean }`
+- Logic:
+  1. Verify the supplier owns items in this order
+  2. Set `status = 'DELIVERED'`
+  3. Set `paymentStatus = 'PAID'` (since COD cash was collected)
+  4. Set `deliveryConfirmation.supplierConfirmed = true`
+  5. Set `deliveryConfirmation.cashCollected = body.cashCollected`
+  6. Set `deliveryConfirmation.deliveredAt = Date.now()`
+  7. Return updated order
+
+**PUT /api/orders/:id/confirm-receipt**
+- Auth: User (must be the order's userId)
+- Body: none
+- Logic:
+  1. Verify `order.userId === req.user._id`
+  2. Verify `order.status === 'DELIVERED'`
+  3. Set `deliveryConfirmation.userConfirmed = true`
+  4. Set `deliveryConfirmation.userConfirmedAt = Date.now()`
+  5. Return updated order
+
+### Order schema addition (see database-schemas.txt):
+Add `deliveryConfirmation` subdocument to Order model with fields:
+- `supplierConfirmed` (Boolean, default false)
+- `userConfirmed` (Boolean, default false)
+- `cashCollected` (Number, default 0)
+- `deliveredAt` (Date, nullable)
+- `userConfirmedAt` (Date, nullable)
+
+### API responses should include:
+When returning orders, flatten or include the deliveryConfirmation object so the
+frontend can read `order.supplierConfirmed`, `order.userConfirmed`, etc.
+Either flatten in toJSON or the frontend already handles nested data via `(order as any).supplierConfirmed`.
+
+Priority: HIGH — This is a core business flow for COD orders.
+
+---
+
+## 22. USER PROFILE — GET & UPDATE ENDPOINTS
+
+The user profile page is now connected to real API calls. The frontend fetches user data
+on mount and saves changes (name, phone, addresses) to the backend in real time.
+
+### Endpoints needed:
+
+**GET /api/auth/profile**
+- Auth: User (JWT required, reads `req.user._id`)
+- Response: `{ user: { _id, name, email, phone, addresses, createdAt } }`
+- Logic:
+  1. Find user by `req.user._id`
+  2. Exclude password from response
+  3. Return the user document
+
+**PUT /api/auth/profile**
+- Auth: User (JWT required)
+- Body: `{ name?: String, phone?: String, addresses?: [{ label, street, city, state, pincode, isDefault }] }`
+- Logic:
+  1. Find user by `req.user._id`
+  2. Update only the provided fields (name, phone)
+  3. If `addresses` array is provided, REPLACE the entire addresses array
+     (the frontend manages the full list client-side and sends the complete array)
+  4. Do NOT allow email or role changes via this endpoint
+  5. Return updated user (exclude password)
+
+### Important notes:
+- The User schema already has `name`, `email`, `phone`, `addresses[]` fields (see database-schemas.txt)
+- Addresses have: label, street, city, state, pincode, isDefault
+- Email is read-only on the frontend (disabled input) — do NOT update it in this endpoint
+- The frontend sends the full addresses array on save, so use `user.addresses = body.addresses`
+  rather than individual add/remove operations
+- Password changes should be a SEPARATE endpoint (not implemented in frontend yet)
+
+Priority: HIGH — Without this, user profile data is lost on page refresh.
+
+---
+
+## 23. SUPPLIER PROFILE — CONFIRM ENDPOINTS EXIST
+
+The supplier profile page already calls these endpoints (documented in item 20 route table):
+- GET /api/supplier/profile — fetch supplier profile
+- PUT /api/supplier/profile — update supplier profile
+
+The supplier profile includes: name, phone, gstin, address, bankDetails
+(bankDetails = { accountHolderName, accountNumber, ifscCode, bankName })
+
+Currently both return 404 in the backend logs. Ensure these routes are registered.
+
+The Supplier schema already has all needed fields (see database-schemas.txt).
+The PUT endpoint should:
+1. Find supplier by `req.user._id` (or `req.supplier._id`)
+2. Update: name, phone, gstin, address, bankDetails
+3. Do NOT allow email or status changes
+4. Return updated supplier (exclude password)
+
+Priority: HIGH — Supplier can't manage their business info without this.
+
+---
+
+## 24. POPULATE USER PHONE & ADDRESS IN ORDER RESPONSES
+
+The supplier and admin order views now display full customer details:
+- Customer name, email, phone, and delivery address
+
+**Problem**: The current populate for orders only includes `name email`:
+```js
+.populate('userId', 'name email')
+```
+
+**Fix**: Add `phone` to the populate selection so the frontend can display it:
+```js
+.populate('userId', 'name email phone')
+```
+
+The `address` field is already stored directly on the Order document (not fetched
+from the User model), so no change is needed for that.
+
+**Applies to both**:
+- `GET /api/orders/supplier` — supplier sees customer phone + address
+- `GET /api/orders/admin` — admin sees customer phone + address
+
+The existing populate in item #19 should be updated from:
+```js
+.populate('userId', 'name email')
+```
+to:
+```js
+.populate('userId', 'name email phone')
+```
+
+Priority: HIGH — Without this, supplier & admin can't see customer phone number.
+
+---
+
+## 25. CHECKOUT — ADDRESS SELECTION FROM SAVED ADDRESSES
+
+The checkout page now loads the user's saved addresses (from `GET /api/auth/profile`)
+and lets the user pick one via a radio selector, or type a new address manually.
+The user can also add & save a new address directly from the checkout dialog.
+
+**No backend changes required** — this uses the existing profile endpoints (items 22–23).
+Just confirming the frontend flow:
+1. `GET /api/auth/profile` → load `addresses[]`
+2. User picks a saved address or types a new one
+3. If "Add & Save New Address" → `PUT /api/auth/profile` with updated addresses array
+4. On "Place Order" → sends the selected address string in the order payload
+
+---
+
+## 26. ADMIN GET ALL USERS — RETURN FULL DETAILS
+
+The frontend admin users page now shows expandable cards with detailed user info.
+The `GET /api/admin/users` endpoint must return **all fields** for each user.
+
+**Current item #7** only says return `_id, name, email, role, createdAt`.
+**New requirement**: Return these additional fields:
+- `phone` — user's phone number
+- `addresses` — full addresses array `[{ label, street, city, state, pincode, isDefault }]`
+- `orderCount` — number of orders placed by this user (use aggregation or a separate count query)
+
+**Backend implementation:**
+```js
+// GET /api/admin/users
+const users = await User.find({}).select('-password').sort({ createdAt: -1 })
+
+// Optionally add order counts:
+const usersWithCounts = await Promise.all(users.map(async (user) => {
+  const orderCount = await Order.countDocuments({ userId: user._id })
+  return { ...user.toJSON(), orderCount }
+}))
+
+res.json(usersWithCounts)
+// OR: res.json({ users: usersWithCounts })
+```
+
+The frontend accepts either a raw array or `{ users: [...] }`.
+
+Priority: HIGH — Admin users page currently shows "No users found" because this endpoint returns 404.
+
+---
+
+## 27. ADMIN GET ALL SUPPLIERS — RETURN FULL DETAILS
+
+The frontend admin suppliers page now shows expandable cards with detailed supplier info
+including contact info, GSTIN, address, bank details, and commission rate.
+
+The `GET /api/admin/suppliers` endpoint must return **all fields** for each supplier.
+
+**Required fields per supplier:**
+- `name, email, phone, gstin, address` — contact info
+- `status` — PENDING / APPROVED / REJECTED
+- `commissionRate` — platform commission percentage (default 10)
+- `bankDetails` — `{ accountHolderName, accountNumber, ifscCode, bankName }`
+- `productCount` — number of products listed by this supplier (optional but nice)
+- `createdAt, updatedAt`
+
+**Backend implementation:**
+```js
+// GET /api/admin/suppliers
+const suppliers = await Supplier.find({}).select('-password').sort({ createdAt: -1 })
+
+// Optionally add product counts:
+const suppliersWithCounts = await Promise.all(suppliers.map(async (supplier) => {
+  const productCount = await Product.countDocuments({ supplierId: supplier._id })
+  return { ...supplier.toJSON(), productCount }
+}))
+
+res.json(suppliersWithCounts)
+// OR: res.json({ suppliers: suppliersWithCounts })
+```
+
+The frontend accepts either a raw array or `{ suppliers: [...] }`.
+
+Priority: HIGH — Admin needs full visibility into supplier business details.
+
+---
+
+=====================================================================
+##    FINAL COMPREHENSIVE API ROUTE TABLE — ALL 40 ENDPOINTS
+=====================================================================
+
+This is the COMPLETE list of every endpoint the frontend calls.
+Implement ALL of them. The frontend is DONE and ready for deployment
+once these endpoints exist and return the expected responses.
+
+### AUTHENTICATION (7 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 1 | POST | /api/auth/register | None | `{ name, email, password }` | `{ message }` |
+| 2 | POST | /api/auth/login | None | `{ email, password }` | `{ token }` (role=USER) |
+| 3 | GET | /api/auth/profile | User | — | `{ user: { name, email, phone, addresses[], createdAt } }` |
+| 4 | PUT | /api/auth/profile | User | `{ name?, phone?, addresses?[] }` | `{ user }` (updated, no password) |
+| 5 | POST | /api/supplier/auth/register | None | `{ name, email, password }` | `{ message }` |
+| 6 | POST | /api/supplier/auth/login | None | `{ email, password }` | `{ token }` (role=SUPPLIER) |
+| 7 | POST | /api/admin/login | None | `{ email, password }` | `{ token }` (role=ADMIN) |
+
+### PRODUCTS (6 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 8 | GET | /api/products | Public | — | `Product[]` or `{ products: [] }` |
+| 9 | GET | /api/products/:id | Public | — | `Product` (single object) |
+| 10 | POST | /api/products | Supplier | `{ name, price, stock, category, images[] }` | `Product` (created) |
+| 11 | PUT | /api/products/:id | Supplier | `Partial<Product>` | `Product` (updated) |
+| 12 | DELETE | /api/products/:id | Supplier | — | `{ message }` |
+| 13 | GET | /api/products/supplier | Supplier | — | `Product[]` (own products only) |
+
+### CART (5 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 14 | GET | /api/cart | User | — | `{ items: CartItem[], total }` |
+| 15 | POST | /api/cart/add | User | `{ productId, quantity }` | `{ items, total }` |
+| 16 | PUT | /api/cart/update | User | `{ productId, quantity }` | `{ items, total }` |
+| 17 | DELETE | /api/cart/remove/:productId | User | — | `{ items, total }` |
+| 18 | DELETE | /api/cart/clear | User | — | `{ message }` |
+
+### ORDERS — USER (4 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 19 | POST | /api/orders | User | `{ items: [{ productId, quantity }], address }` | `Order` (created) |
+| 20 | GET | /api/orders/my | User | — | `Order[]` (user's orders) |
+| 21 | GET | /api/orders/:id | User | — | `Order` (single) |
+| 22 | PUT | /api/orders/:id/confirm-receipt | User | — | `Order` (userConfirmed=true) |
+
+### ORDERS — SUPPLIER (3 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 23 | GET | /api/orders/supplier | Supplier | — | `Order[]` (supplier's orders) — populate userId with name, email, phone |
+| 24 | PUT | /api/orders/supplier/:id/status | Supplier | `{ status }` | `Order` (updated) |
+| 25 | PUT | /api/orders/supplier/:id/deliver | Supplier | `{ cashCollected, supplierConfirmed }` | `Order` (delivery confirmed) |
+
+### ORDERS — ADMIN (1 endpoint, read-only)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 26 | GET | /api/orders/admin | Admin | — | `Order[]` — populate userId(name,email,phone), items.productId(name,price,images), supplier details |
+
+Note: PUT /api/orders/admin/:id/status exists in code but is NOT used by the frontend. Admin orders are read-only. You may keep it for emergency backend use.
+
+### ADMIN MANAGEMENT (5 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 27 | GET | /api/admin/suppliers | Admin | — | `Supplier[]` — ALL fields: name,email,phone,gstin,address,bankDetails,status,commissionRate,productCount,createdAt |
+| 28 | PUT | /api/admin/suppliers/:id/approve | Admin | — | `{ supplier }` (status→APPROVED) |
+| 29 | PUT | /api/admin/suppliers/:id/reject | Admin | — | `{ supplier }` (status→REJECTED) |
+| 30 | GET | /api/admin/users | Admin | — | `User[]` — ALL fields: name,email,phone,role,addresses[],orderCount,createdAt |
+| 31 | DELETE | /api/admin/users/:id | Admin | — | `{ message }` |
+
+### DASHBOARDS (2 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 32 | GET | /api/dashboard/supplier | Supplier | — | `{ productsCount, ordersCount, revenue, commissionPaid, recentOrders[] }` |
+| 33 | GET | /api/dashboard/admin | Admin | — | `{ totalUsers, totalSuppliers, totalOrders, totalRevenue, pendingSuppliers, recentOrders[] }` |
+
+### SUPPLIER PROFILE & PAYMENTS (4 endpoints)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 34 | GET | /api/supplier/profile | Supplier | — | `{ supplier: { name,email,phone,gstin,address,bankDetails,status,createdAt } }` |
+| 35 | PUT | /api/supplier/profile | Supplier | `{ name?,phone?,gstin?,address?,bankDetails? }` | `{ supplier }` (updated) |
+| 36 | GET | /api/supplier/payments/summary | Supplier | — | `{ totalRevenue, totalCommission, netPayout, pendingPayout }` |
+| 37 | GET | /api/supplier/payments/transactions | Supplier | — | `Transaction[]` |
+
+### FILE UPLOAD (1 endpoint)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 38 | POST | /api/upload | Any auth | `multipart/form-data` field="image" | `{ url: "https://res.cloudinary.com/..." }` |
+
+### HEALTH CHECK (1 endpoint)
+
+| # | Method | Path | Auth | Body | Response |
+|---|--------|------|------|------|----------|
+| 39 | GET | /health | None | — | `{ status: "ok" }` or similar |
+
+---
+
+### RESPONSE FORMAT NOTES
+
+1. **Array responses**: The frontend handles BOTH `data` (raw array) and `data.users` / `data.orders` / `data.products` (wrapped). Return either format.
+
+2. **ID field**: Apply `toJSON` transform on ALL schemas to map `_id → id` (see item #9). The frontend uses `item.id || item._id` as fallback.
+
+3. **Passwords**: NEVER return passwords. Use `.select('-password')` on all queries.
+
+4. **Populate orders**: All order endpoints should populate:
+   ```js
+   .populate('userId', 'name email phone')
+   .populate('items.productId', 'name price images')
+   .populate({ path: 'items.productId', populate: { path: 'supplierId', select: 'name email' } })
+   ```
+
+5. **Delivery confirmation**: Return `deliveryConfirmation` subdocument in order responses. The frontend reads `order.supplierConfirmed`, `order.userConfirmed`, `order.cashCollected`, `order.deliveredAt`, `order.userConfirmedAt`. Either flatten in toJSON or ensure the nested object is accessible.
+
+6. **Cart items**: Populate `productId` in cart items:
+   ```js
+   .populate('items.productId', 'name price images stock')
+   ```
+   The frontend reads `item.product.name`, `item.product.price`, `item.product.images[]`, `item.product.stock`.
+
+---
+
+### CRITICAL ITEMS CHECKLIST (must work before deployment)
+
+- [ ] POST /api/auth/register — user registration
+- [ ] POST /api/auth/login — user login, returns JWT token
+- [ ] GET /api/products — public product listing
+- [ ] GET /api/products/:id — single product view
+- [ ] POST /api/orders — order placement (the #1 broken flow, item #1)
+- [ ] GET /api/cart + POST/PUT/DELETE cart endpoints — shopping cart
+- [ ] GET /api/orders/my — user's order history
+- [ ] POST /api/supplier/auth/login — supplier login
+- [ ] POST /api/admin/login — admin login
+- [ ] **GET /api/admin/users** — admin user listing (**CONFIRMED 404**, items #7 + #26)
+- [ ] **GET /api/admin/suppliers** — admin supplier listing with ALL fields (items #27)
+- [ ] GET /api/orders/admin — admin order listing with populated user + supplier (#19, #24)
+- [ ] GET /api/orders/supplier — supplier order listing with populated user (#24)
+- [ ] PUT /api/orders/supplier/:id/status — supplier status update
+- [ ] GET /api/products/supplier — supplier's own products (currently 404)
+- [ ] POST /api/upload — image upload to Cloudinary (currently 404)
+- [ ] GET/PUT /api/auth/profile — user profile (currently 404)
+- [ ] GET/PUT /api/supplier/profile — supplier profile (currently 404)
+- [ ] Product slug auto-generation (item #17, blocks product creation)
+- [ ] PUT /api/orders/supplier/:id/deliver — delivery + cash confirmation (#21)
+- [ ] PUT /api/orders/:id/confirm-receipt — user confirm receipt (#21)
+
+---
+
+### DATABASE COLLECTIONS ALIGNMENT
+
+Your MongoDB database has these collections:
+  addresses, carts, categories, enquiries, orders, payments, products, reviews, suppliers, users
+
+All are now documented in database-schemas.txt (11 schemas total).
+- `addresses` — may be auto-created by MongoDB for User.addresses subdocs OR a separate collection
+- `categories` — optional, for dynamic category management (currently hardcoded enum in Product schema)
+- `enquiries` — optional, for future contact/support form
+- `payments` — optional, overlaps with transactions schema; use for payment tracking
+- All core collections (users, suppliers, products, orders, carts) are fully defined
+
+### NOTE ON GET /api/admin/users — THIS IS THE #1 CONFIRMED BLOCKER
+
+The admin dashboard shows "Total Users: 4" (because GET /api/dashboard/admin works),
+but the admin Users page shows "No users found" because GET /api/admin/users does NOT exist.
+
+This endpoint MUST:
+1. Return ALL users from the users collection
+2. Exclude passwords (`.select('-password')`)
+3. Include ALL fields: `_id/id, name, email, phone, role, addresses[], createdAt`
+4. Optionally include `orderCount` per user
+5. Sort by `createdAt: -1` (newest first)
+
+The frontend now shows a clear yellow error banner when this fails,
+with the exact error message and a Retry button.
+
+Simple implementation:
+```js
+router.get('/api/admin/users', adminAuth, async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password').sort({ createdAt: -1 })
+    res.json(users)  // OR res.json({ users })
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch users' })
+  }
+})
+```
