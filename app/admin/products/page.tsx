@@ -275,7 +275,9 @@ export default function AdminProductsPage() {
                         </Badge>
                       </td>
                       <td className="p-4 text-foreground">
-                        {product.supplier?.name || product.supplierName || <span className="text-muted-foreground">—</span>}
+                        {product.supplier?.name || product.supplierName || product.supplier?.email || (
+                          <span className="text-muted-foreground italic">Not populated</span>
+                        )}
                       </td>
                       <td className="p-4">
                         <Badge className={approvalStatusColors[status] || approvalStatusColors.PENDING}>

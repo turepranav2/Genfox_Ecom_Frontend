@@ -139,6 +139,11 @@ export default function AdminOrdersPage() {
         const dt = order.createdAt ? formatDateTime(order.createdAt) : null
         const isDelivered = order.status?.toUpperCase() === "DELIVERED"
 
+        // Resolve customer name from all possible data shapes
+        const customerName = order.user?.name || order.customer?.name || order.customer || order.customerName || "N/A"
+        const customerEmail = order.user?.email || order.customer?.email || order.email || ""
+        const customerPhone = order.user?.phone || order.customer?.phone || order.phone || ""
+
         // Gather unique supplier names
         const supplierNames = order.items
           ?.map((i: any) => i.product?.supplier?.name || i.supplier?.name || i.supplierName)
@@ -156,7 +161,7 @@ export default function AdminOrdersPage() {
                       <div>
                         <p className="text-sm font-semibold text-foreground">Order #{orderId?.slice(-8)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {order.user?.name || order.customer || "Customer"} &middot; {dt?.date || "—"}
+                          {customerName} &middot; {dt?.date || "—"}
                         </p>
                       </div>
                     </div>
@@ -180,15 +185,15 @@ export default function AdminOrdersPage() {
                       <div className="rounded-lg border border-border bg-secondary/30 p-3">
                         <div className="flex items-center gap-2 text-sm text-foreground">
                           <User className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="font-medium">{order.user?.name || order.customer || "N/A"}</span>
+                          <span className="font-medium">{customerName}</span>
                         </div>
-                        {order.user?.email && (
-                          <p className="mt-1 text-xs text-muted-foreground">{order.user.email}</p>
+                        {customerEmail && (
+                          <p className="mt-1 text-xs text-muted-foreground">{customerEmail}</p>
                         )}
-                        {(order.user?.phone || order.phone) && (
+                        {customerPhone && (
                           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                             <Phone className="h-3.5 w-3.5" />
-                            <span>{order.user?.phone || order.phone}</span>
+                            <span>{customerPhone}</span>
                           </div>
                         )}
                         <Separator className="my-2" />

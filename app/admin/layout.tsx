@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard-shell"
-import { LayoutDashboard, Users, Truck, ShoppingCart, Package, BarChart3, LogOut } from "lucide-react"
+import { LayoutDashboard, Users, Truck, ShoppingCart, Package, BarChart3, LogOut, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ReactNode } from "react"
 
@@ -12,6 +12,7 @@ const adminNav = [
   { label: "Products", href: "/admin/products", icon: <Package className="h-4 w-4" /> },
   { label: "Orders", href: "/admin/orders", icon: <ShoppingCart className="h-4 w-4" /> },
   { label: "Users", href: "/admin/users", icon: <Users className="h-4 w-4" /> },
+  { label: "Banners", href: "/admin/banners", icon: <ImageIcon className="h-4 w-4" /> },
   { label: "Reports", href: "/admin/reports", icon: <BarChart3 className="h-4 w-4" /> },
 ]
 

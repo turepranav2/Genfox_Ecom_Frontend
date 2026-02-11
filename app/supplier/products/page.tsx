@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { productAPI, uploadAPI } from "@/lib/api"
+import { productAPI, uploadAPI, categoryAPI, Category } from "@/lib/api"
 import { formatPrice } from "@/lib/api/api-utils"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Search, Upload, Loader2, ImagePlus, X as XIcon } from "lucide-react"
 
-const categories = [
+const fallbackCategories = [
   "Electronics",
   "Fashion",
   "Home & Kitchen",
@@ -47,20 +47,39 @@ export default function SupplierProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([])
 
   // Form state
   const [formName, setFormName] = useState("")
   const [formPrice, setFormPrice] = useState("")
   const [formStock, setFormStock] = useState("")
   const [formCategory, setFormCategory] = useState("")
+  const [formSubcategory, setFormSubcategory] = useState("")
   const [formImages, setFormImages] = useState("")
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [allCategories, setAllCategories] = useState<Category[]>([])
+
+  const categories = dynamicCategories.length > 0 ? dynamicCategories : fallbackCategories
+
+  // Get subcategories for the selected category
+  const currentSubcategories = allCategories.find((c) => c.name === formCategory)?.subcategories || []
 
   const fetchProducts = async () => {
     try {
-      const data = await productAPI.getSupplierProducts()
-      setProducts(Array.isArray(data) ? data : data.products || [])
+      const [prodData, catData] = await Promise.allSettled([
+        productAPI.getSupplierProducts(),
+        categoryAPI.getAll(),
+      ])
+      if (prodData.status === "fulfilled") {
+        const d = prodData.value
+        setProducts(Array.isArray(d) ? d : d.products || [])
+      }
+      if (catData.status === "fulfilled") {
+        const cats = catData.value
+        setAllCategories(cats)
+        setDynamicCategories(cats.map((c: Category) => c.name))
+      }
     } catch (error: any) {
       toast({
         title: "Failed to load products",
@@ -81,6 +100,7 @@ export default function SupplierProductsPage() {
     setFormPrice("")
     setFormStock("")
     setFormCategory("")
+    setFormSubcategory("")
     setFormImages("")
     setUploadedImageUrls([])
     setEditingId(null)
@@ -93,6 +113,7 @@ export default function SupplierProductsPage() {
     setFormPrice(String(p.price || ""))
     setFormStock(String(p.stock ?? ""))
     setFormCategory(p.category || "")
+    setFormSubcategory(p.subcategory || "")
     setFormImages((p.images || []).join(", "))
     setUploadedImageUrls(p.images || [])
     setDialogOpen(true)
@@ -107,6 +128,7 @@ export default function SupplierProductsPage() {
       price: Number(formPrice),
       stock: Number(formStock) || 0,
       category: formCategory,
+      subcategory: formSubcategory || undefined,
       images: uploadedImageUrls.length > 0
         ? uploadedImageUrls
         : formImages
@@ -224,7 +246,7 @@ export default function SupplierProductsPage() {
               </div>
               <div>
                 <Label className="text-foreground">Category</Label>
-                <Select value={formCategory} onValueChange={setFormCategory}>
+                <Select value={formCategory} onValueChange={(v) => { setFormCategory(v); setFormSubcategory(""); }}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {categories.map((c) => (
@@ -233,6 +255,19 @@ export default function SupplierProductsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {currentSubcategories.length > 0 && (
+                <div>
+                  <Label className="text-foreground">Subcategory</Label>
+                  <Select value={formSubcategory} onValueChange={setFormSubcategory}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select subcategory (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      {currentSubcategories.map((s: any) => (
+                        <SelectItem key={s.id || s._id || s.name} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Label className="text-foreground">Product Images</Label>
                 <div className="mt-1 flex flex-col gap-2">

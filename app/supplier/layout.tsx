@@ -2,13 +2,14 @@
 
 import { usePathname } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard-shell"
-import { LayoutDashboard, Package, ShoppingCart, CreditCard, User, LogOut } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingCart, CreditCard, User, LogOut, FolderTree } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ReactNode } from "react"
 
 const supplierNav = [
   { label: "Dashboard", href: "/supplier", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Products", href: "/supplier/products", icon: <Package className="h-4 w-4" /> },
+  { label: "Categories", href: "/supplier/categories", icon: <FolderTree className="h-4 w-4" /> },
   { label: "Orders", href: "/supplier/orders", icon: <ShoppingCart className="h-4 w-4" /> },
   { label: "Payments", href: "/supplier/payments", icon: <CreditCard className="h-4 w-4" /> },
   { label: "Profile", href: "/supplier/profile", icon: <User className="h-4 w-4" /> },

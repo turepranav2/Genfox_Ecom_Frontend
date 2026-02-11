@@ -1,0 +1,386 @@
+BACKEND REQUIREMENTS FOR NEW FRONTEND FEATURES
+=================================================
+Generated for the backend developer to make the API compatible with
+the new frontend features. Implement all of these endpoints, schemas,
+and changes.
+
+====================================================================
+
+## 1. ADMIN ORDERS — Populate User & Supplier Details
+-----------------------------------------------------
+
+### Problem:
+The admin orders page shows "N/A" for customer names and "—" for
+supplier names because the backend doesn't populate related documents.
+
+### Required Changes:
+- **GET /api/orders/admin** — When returning orders, populate the
+  following fields:
+  
+  ```javascript
+  Order.find()
+    .populate('userId', 'name email phone addresses')
+    .populate('items.supplierId', 'name email phone')
+    .populate('items.productId', 'name images price supplier')
+    .sort({ createdAt: -1 })
+  ```
+
+- The response for each order should include:
+  ```json
+  {
+    "id": "...",
+    "user": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "9876543210"
+    },
+    "items": [
+      {
+        "name": "Product Name",
+        "price": 700,
+        "quantity": 2,
+        "supplier": {
+          "name": "Supplier Business Name"
+        },
+        "product": {
+          "name": "Product Name",
+          "images": ["https://..."],
+          "supplier": {
+            "name": "Supplier Business Name"
+          }
+        }
+      }
+    ],
+    "total": 1400,
+    "address": "...",
+    "status": "PROCESSING",
+    "createdAt": "..."
+  }
+  ```
+
+- **IMPORTANT**: The `userId` field should be returned as `user` in
+  the JSON response (use a virtual or transform).
+
+====================================================================
+
+## 2. ADMIN PRODUCTS — Populate Supplier Name
+----------------------------------------------
+
+### Problem:
+The admin products page shows "—" for supplier because the backend
+doesn't populate the supplier reference.
+
+### Required Changes:
+- **GET /api/admin/products** — Populate the supplier:
+  
+  ```javascript
+  Product.find()
+    .populate('supplierId', 'name email phone')
+    .sort({ createdAt: -1 })
+  ```
+
+- Ensure the response includes `supplier` as an object:
+  ```json
+  {
+    "id": "...",
+    "name": "Product Name",
+    "supplier": {
+      "name": "Business Name",
+      "email": "supplier@email.com"
+    },
+    ...
+  }
+  ```
+
+- If using `toJSON` transform, map `supplierId` to `supplier`:
+  ```javascript
+  productSchema.set('toJSON', {
+    virtuals: true,
+    transform: (_doc, ret) => {
+      ret.id = ret._id.toString()
+      if (ret.supplierId && typeof ret.supplierId === 'object') {
+        ret.supplier = ret.supplierId
+      }
+      delete ret.__v
+      return ret
+    }
+  })
+  ```
+
+====================================================================
+
+## 3. CATEGORY & SUBCATEGORY SYSTEM
+-------------------------------------
+
+### New Schema — Category
+
+Create a new `Category` model:
+
+```javascript
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Category name is required'],
+    trim: true,
+    maxlength: 100
+  },
+  slug: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  image: {
+    type: String,
+    default: ''
+  },
+  subcategories: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    slug: {
+      type: String,
+      default: ''
+    }
+  }],
+  supplierId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    default: null   // null = system-level category
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true
+})
+
+// Auto-generate slug
+categorySchema.pre('save', function(next) {
+  if (!this.slug || this.isModified('name')) {
+    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  }
+  // Generate slugs for subcategories too
+  this.subcategories.forEach(sub => {
+    if (!sub.slug) {
+      sub.slug = sub.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    }
+  })
+  next()
+})
+
+categorySchema.index({ slug: 1 }, { unique: true })
+categorySchema.index({ supplierId: 1 })
+```
+
+### New API Endpoints:
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | /api/categories | Public | Get all active categories with subcategories |
+| GET | /api/categories/:id | Public | Get single category |
+| POST | /api/categories | Supplier | Create a new category |
+| PUT | /api/categories/:id | Supplier | Update a category |
+| DELETE | /api/categories/:id | Supplier | Delete a category |
+| POST | /api/categories/:id/subcategories | Supplier | Add subcategory |
+| PUT | /api/categories/:id/subcategories/:subId | Supplier | Update subcategory |
+| DELETE | /api/categories/:id/subcategories/:subId | Supplier | Delete subcategory |
+
+### Implementation Notes:
+
+**GET /api/categories** (Public):
+```javascript
+router.get('/api/categories', async (req, res) => {
+  const categories = await Category.find({ isActive: true })
+    .sort({ name: 1 })
+  res.json(categories)
+})
+```
+
+**POST /api/categories** (Supplier auth required):
+```javascript
+router.post('/api/categories', authMiddleware, supplierOnly, async (req, res) => {
+  const { name, image } = req.body
+  const category = await Category.create({
+    name,
+    image,
+    supplierId: req.user.id
+  })
+  res.status(201).json({ category })
+})
+```
+
+**POST /api/categories/:id/subcategories** (Supplier auth required):
+```javascript
+router.post('/api/categories/:id/subcategories', authMiddleware, supplierOnly, async (req, res) => {
+  const category = await Category.findById(req.params.id)
+  if (!category) return res.status(404).json({ message: 'Category not found' })
+  
+  const { name } = req.body
+  category.subcategories.push({ name })
+  await category.save()
+  
+  const newSub = category.subcategories[category.subcategories.length - 1]
+  res.status(201).json({ subcategory: newSub })
+})
+```
+
+====================================================================
+
+## 4. PRODUCT SCHEMA UPDATE — Add subcategory field
+----------------------------------------------------
+
+### Required Change:
+Add a `subcategory` field to the Product schema:
+
+```javascript
+subcategory: {
+  type: String,
+  default: '',
+  trim: true
+}
+```
+
+### Update Product Category Enum:
+The `category` field should now accept dynamic values
+(from the Category collection) rather than a hardcoded enum.
+Either:
+- Remove the enum constraint and validate against Category collection
+- Or keep enum but add all new categories
+
+**Recommended approach**: Remove the enum and validate dynamically:
+```javascript
+category: {
+  type: String,
+  required: [true, 'Category is required'],
+  trim: true
+  // Remove enum — categories are now dynamic
+}
+```
+
+====================================================================
+
+## 5. BANNER / CAROUSEL SYSTEM (Admin only)
+---------------------------------------------
+
+### New Schema — Banner
+
+```javascript
+const bannerSchema = new mongoose.Schema({
+  imageUrl: {
+    type: String,
+    required: [true, 'Banner image URL is required'],
+    validate: {
+      validator: (v) => v.startsWith('http://') || v.startsWith('https://'),
+      message: 'Image URL must be an absolute URL'
+    }
+  },
+  link: {
+    type: String,
+    required: [true, 'Banner link is required'],
+    trim: true
+  },
+  title: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  order: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+})
+
+bannerSchema.index({ isActive: 1, order: 1 })
+```
+
+### New API Endpoints:
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | /api/banners | Public | Get active banners (sorted by order) |
+| GET | /api/admin/banners | Admin | Get ALL banners |
+| POST | /api/admin/banners | Admin | Create banner |
+| PUT | /api/admin/banners/:id | Admin | Update banner |
+| DELETE | /api/admin/banners/:id | Admin | Delete banner |
+| PUT | /api/admin/banners/reorder | Admin | Reorder banners |
+
+### Implementation Notes:
+
+**GET /api/banners** (Public — for homepage carousel):
+```javascript
+router.get('/api/banners', async (req, res) => {
+  const banners = await Banner.find({ isActive: true })
+    .sort({ order: 1 })
+  res.json(banners)
+})
+```
+
+**POST /api/admin/banners** (Admin auth required):
+```javascript
+router.post('/api/admin/banners', authMiddleware, adminOnly, async (req, res) => {
+  const { imageUrl, link, title, isActive, order } = req.body
+  const banner = await Banner.create({ imageUrl, link, title, isActive, order })
+  res.status(201).json({ banner })
+})
+```
+
+**PUT /api/admin/banners/reorder** (Admin auth required):
+```javascript
+router.put('/api/admin/banners/reorder', authMiddleware, adminOnly, async (req, res) => {
+  const { bannerIds } = req.body  // Array of banner IDs in desired order
+  for (let i = 0; i < bannerIds.length; i++) {
+    await Banner.findByIdAndUpdate(bannerIds[i], { order: i })
+  }
+  res.json({ message: 'Banners reordered' })
+})
+```
+
+====================================================================
+
+## 6. SUPPLIER ORDERS — Populate Buyer Details
+------------------------------------------------
+
+### Problem:
+When viewing orders as a supplier, the customer name/phone is not
+visible.
+
+### Required Changes:
+- **GET /api/orders/supplier** — Populate user details:
+  ```javascript
+  Order.find({ 'items.supplierId': req.user.id })
+    .populate('userId', 'name email phone')
+    .sort({ createdAt: -1 })
+  ```
+
+====================================================================
+
+## SUMMARY OF NEW FILES TO CREATE:
+1. `src/models/Category.js` — Category schema with subcategories
+2. `src/models/Banner.js` — Banner schema
+3. `src/routes/category.js` — Category CRUD routes
+4. `src/routes/banner.js` — Banner public + admin routes
+5. Register both route files in your main app/server
+
+## SUMMARY OF EXISTING FILES TO MODIFY:
+1. **Product model** — Add `subcategory` field, make `category` dynamic
+2. **Order routes (admin)** — Add `.populate()` for user & supplier
+3. **Product routes (admin)** — Add `.populate()` for supplier
+4. **Order routes (supplier)** — Add `.populate()` for user
+5. **Server/app.js** — Register new route files
+
+====================================================================
+
+## ENVIRONMENT / CONFIG:
+- No new environment variables needed
+- Same Cloudinary setup works for banner image uploads
+- Use existing auth middleware for supplier/admin auth
+- CORS settings remain the same

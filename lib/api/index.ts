@@ -9,6 +9,8 @@ export * from './admin-api'
 export * from './dashboard-api'
 export * from './supplier-api'
 export * from './upload-api'
+export * from './category-api'
+export * from './banner-api'
 
 // Health check
 export const healthCheck = async () => {

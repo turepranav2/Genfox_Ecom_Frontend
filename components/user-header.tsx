@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@/lib/store"
-import { Search, ShoppingCart, User, Package, Menu, X, LogIn, LogOut, UserPlus, Store, ChevronDown } from "lucide-react"
+import { categoryAPI, Category } from "@/lib/api"
+import { Search, ShoppingCart, User, Package, Menu, X, LogIn, LogOut, UserPlus, Store, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 
 export function UserHeader() {
   const { cartCount } = useStore()
@@ -25,11 +26,28 @@ export function UserHeader() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "")
+  const [categories, setCategories] = useState<Category[]>([])
+  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null)
+  const [megaMenuOpen, setMegaMenuOpen] = useState(false)
+  const megaMenuTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Mark as mounted after first client render to avoid hydration mismatch
   useEffect(() => {
     setMounted(true)
     setIsLoggedIn(!!localStorage.getItem('token'))
+  }, [])
+
+  // Fetch categories for mega-menu
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const data = await categoryAPI.getAll()
+        setCategories(data)
+      } catch {
+        // Categories API may not be ready yet, use empty
+      }
+    }
+    fetchCategories()
   }, [])
 
   // Sync search input with URL param when navigating
@@ -64,6 +82,24 @@ export function UserHeader() {
     } else {
       router.push("/")
     }
+  }
+
+  const handleMegaMenuEnter = () => {
+    if (megaMenuTimeout.current) clearTimeout(megaMenuTimeout.current)
+    setMegaMenuOpen(true)
+  }
+
+  const handleMegaMenuLeave = () => {
+    megaMenuTimeout.current = setTimeout(() => {
+      setMegaMenuOpen(false)
+      setHoveredCategory(null)
+    }, 200)
+  }
+
+  const handleCategoryClick = (catName: string) => {
+    setMegaMenuOpen(false)
+    setHoveredCategory(null)
+    router.push(`/?q=&category=${encodeURIComponent(catName)}`)
   }
 
   return (
@@ -232,6 +268,69 @@ export function UserHeader() {
         </div>
       </form>
 
+      {/* Category Mega-Menu Bar — Desktop */}
+      {categories.length > 0 && (
+        <div className="hidden md:block border-t border-primary-foreground/10 bg-primary/95">
+          <div className="mx-auto flex max-w-7xl items-center px-4">
+            {categories.map((cat) => {
+              const catId = cat.id || cat._id || cat.name
+              const hasSubs = (cat.subcategories || []).length > 0
+              return (
+                <div
+                  key={catId}
+                  className="relative"
+                  onMouseEnter={() => {
+                    handleMegaMenuEnter()
+                    setHoveredCategory(catId)
+                  }}
+                  onMouseLeave={handleMegaMenuLeave}
+                >
+                  <button
+                    className={`flex items-center gap-1 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-primary-foreground/80 transition-colors hover:text-primary-foreground hover:bg-primary-foreground/10 ${
+                      hoveredCategory === catId ? "text-primary-foreground bg-primary-foreground/10" : ""
+                    }`}
+                    onClick={() => handleCategoryClick(cat.name)}
+                  >
+                    {cat.name}
+                    {hasSubs && <ChevronDown className="h-3 w-3 opacity-60" />}
+                  </button>
+
+                  {/* Mega dropdown for this category */}
+                  {megaMenuOpen && hoveredCategory === catId && hasSubs && (
+                    <div
+                      className="absolute left-0 top-full z-50 min-w-[240px] rounded-b-lg border border-border bg-card shadow-xl"
+                      onMouseEnter={handleMegaMenuEnter}
+                      onMouseLeave={handleMegaMenuLeave}
+                    >
+                      <div className="p-3">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+                          {cat.name}
+                        </p>
+                        <div className="flex flex-col gap-0.5">
+                          {(cat.subcategories || []).map((sub: any) => (
+                            <button
+                              key={sub.id || sub._id || sub.name}
+                              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-secondary transition-colors text-left"
+                              onClick={() => {
+                                setMegaMenuOpen(false)
+                                router.push(`/?category=${encodeURIComponent(cat.name)}&sub=${encodeURIComponent(sub.name)}`)
+                              }}
+                            >
+                              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                              {sub.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Mobile menu */}
       {mobileMenuOpen && (
         <div className="border-t border-primary-foreground/10 px-4 pb-4 md:hidden">
@@ -263,6 +362,42 @@ export function UserHeader() {
                 <Link href="/supplier/register" className="flex items-center gap-2 rounded-md px-3 py-2.5 hover:bg-primary-foreground/10" onClick={() => setMobileMenuOpen(false)}>
                   <Store className="h-4 w-4" /> Become a Seller
                 </Link>
+              </>
+            )}
+            {/* Mobile categories */}
+            {categories.length > 0 && (
+              <>
+                <div className="my-1 border-t border-primary-foreground/10" />
+                <p className="px-3 pt-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground/60">Categories</p>
+                {categories.map((cat) => {
+                  const catId = cat.id || cat._id || cat.name
+                  return (
+                    <div key={catId}>
+                      <button
+                        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-primary-foreground/10"
+                        onClick={() => {
+                          setMobileMenuOpen(false)
+                          handleCategoryClick(cat.name)
+                        }}
+                      >
+                        {cat.name}
+                        {(cat.subcategories || []).length > 0 && <ChevronRight className="h-3 w-3 opacity-60" />}
+                      </button>
+                      {(cat.subcategories || []).map((sub: any) => (
+                        <button
+                          key={sub.id || sub._id || sub.name}
+                          className="flex w-full items-center gap-2 rounded-md pl-8 pr-3 py-1.5 text-xs text-primary-foreground/70 hover:bg-primary-foreground/10"
+                          onClick={() => {
+                            setMobileMenuOpen(false)
+                            router.push(`/?category=${encodeURIComponent(cat.name)}&sub=${encodeURIComponent(sub.name)}`)
+                          }}
+                        >
+                          {sub.name}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })}
               </>
             )}
           </div>
