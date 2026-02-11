@@ -61,7 +61,7 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       await authAPI.updateProfile({ name, phone, addresses })
-      toast({ title: "Profile updated", description: "Your profile has been saved successfully" })
+      toast({ title: "✅ Profile updated!", description: "Your changes have been saved successfully." })
     } catch (error: any) {
       toast({
         title: "Failed to save",

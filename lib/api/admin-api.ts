@@ -69,4 +69,22 @@ export const adminAPI = {
     const response = await api.delete(`/api/admin/users/${userId}`)
     return response.data
   },
+
+  // Get all products (admin - includes all approval statuses)
+  getAllProducts: async () => {
+    const response = await api.get('/api/admin/products')
+    return response.data
+  },
+
+  // Approve product
+  approveProduct: async (productId: string) => {
+    const response = await api.put(`/api/admin/products/${productId}/approve`)
+    return response.data
+  },
+
+  // Reject product
+  rejectProduct: async (productId: string) => {
+    const response = await api.put(`/api/admin/products/${productId}/reject`)
+    return response.data
+  },
 }

@@ -18,14 +18,14 @@ export function ProductCard({ product }: { product: Product }) {
 
   return (
     <Link href={`/product/${pid}`}>
-      <Card className="group h-full overflow-hidden border-border transition-shadow hover:shadow-lg">
+      <Card className="group h-full overflow-hidden border-border transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
         <CardContent className="p-0">
-          <div className="relative aspect-square overflow-hidden bg-muted">
+          <div className="relative aspect-square overflow-hidden bg-white">
             <Image
               src={resolveImage(product.images)}
               alt={product.name}
               fill
-              className="object-cover transition-transform group-hover:scale-105"
+              className="object-contain p-3 transition-transform group-hover:scale-105"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             />
             {product.stock <= 0 && (

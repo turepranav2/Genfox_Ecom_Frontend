@@ -128,7 +128,7 @@ export default function SupplierProductsPage() {
         const created = await productAPI.create(productData)
         const newProduct = created.product || created
         setProducts((prev) => [...prev, newProduct])
-        toast({ title: "Product created", description: `${formName} has been added` })
+        toast({ title: "✅ Product created", description: `${formName} has been submitted for admin approval` })
       }
       setDialogOpen(false)
       resetForm()
@@ -335,6 +335,7 @@ export default function SupplierProductsPage() {
                   <th className="pb-3 font-medium text-muted-foreground">Category</th>
                   <th className="pb-3 font-medium text-muted-foreground">Price</th>
                   <th className="pb-3 font-medium text-muted-foreground">Stock</th>
+                  <th className="pb-3 font-medium text-muted-foreground">Approval</th>
                   <th className="pb-3 font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
@@ -363,6 +364,26 @@ export default function SupplierProductsPage() {
                         <Badge variant={(product.stock ?? 0) > 0 ? "default" : "destructive"} className={(product.stock ?? 0) > 0 ? "bg-success text-success-foreground" : ""}>
                           {(product.stock ?? 0) > 0 ? `${product.stock} in stock` : "Out of Stock"}
                         </Badge>
+                      </td>
+                      <td className="py-3">
+                        {(() => {
+                          const approvalStatus = (product.approvalStatus || "PENDING").toUpperCase()
+                          const colors: Record<string, string> = {
+                            APPROVED: "bg-emerald-900/40 text-emerald-400 border border-emerald-700/50",
+                            PENDING: "bg-yellow-900/40 text-yellow-400 border border-yellow-700/50",
+                            REJECTED: "bg-red-900/40 text-red-400 border border-red-700/50",
+                          }
+                          const labels: Record<string, string> = {
+                            APPROVED: "✅ Approved",
+                            PENDING: "⏳ Awaiting Approval",
+                            REJECTED: "❌ Rejected",
+                          }
+                          return (
+                            <Badge className={colors[approvalStatus] || colors.PENDING}>
+                              {labels[approvalStatus] || "Pending"}
+                            </Badge>
+                          )
+                        })()}
                       </td>
                       <td className="py-3">
                         <div className="flex gap-1">

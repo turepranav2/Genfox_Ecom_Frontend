@@ -3,15 +3,14 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { productAPI, cartAPI, Product } from "@/lib/api"
 import { formatPrice } from "@/lib/api/api-utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search, ShoppingBag, ShoppingCart } from "lucide-react"
+import { ShoppingBag, ShoppingCart } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 
@@ -21,7 +20,8 @@ export default function HomePage() {
   const { toast } = useToast()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
+  const searchParams = useSearchParams()
+  const search = searchParams.get("q") || ""
   const [selectedCategory, setSelectedCategory] = useState("All")
   const router = useRouter()
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
@@ -82,26 +82,14 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-4">
-      {/* Search */}
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search products..."
-            className="pl-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
       {/* Category pills */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap gap-2 animate-fade-in">
         {categories.map((cat) => (
           <Button
             key={cat}
             variant={selectedCategory === cat ? "default" : "outline"}
             size="sm"
+            className="transition-all duration-200 hover:scale-105"
             onClick={() => setSelectedCategory(cat)}
           >
             {cat}
@@ -129,17 +117,17 @@ export default function HomePage() {
           <p className="text-sm text-muted-foreground">Try a different search or category</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 stagger-children">
           {filteredProducts.map((product) => (
             <Link key={product.id || (product as any)._id} href={`/product/${product.id || (product as any)._id}`}>
-              <Card className="group h-full overflow-hidden border-border transition-shadow hover:shadow-lg">
+              <Card className="group h-full overflow-hidden border-border transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                 <CardContent className="p-0">
-                  <div className="relative aspect-square overflow-hidden bg-muted">
+                  <div className="relative aspect-square overflow-hidden bg-white">
                     <Image
                       src={resolveImage(product.images)}
                       alt={product.name}
                       fill
-                      className="object-cover transition-transform group-hover:scale-105"
+                      className="object-contain p-3 transition-transform group-hover:scale-105"
                       sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                     />
                     {product.stock <= 0 && (
@@ -163,7 +151,7 @@ export default function HomePage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="mt-1.5 w-full text-xs"
+                        className="mt-1.5 w-full text-xs transition-all duration-200 hover:bg-primary hover:text-primary-foreground"
                         disabled={addingToCart === (product.id || (product as any)._id)}
                         onClick={(e) => handleQuickAddToCart(e, product)}
                       >

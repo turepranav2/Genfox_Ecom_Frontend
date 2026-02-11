@@ -45,8 +45,8 @@ export default function UserRegisterPage() {
       })
       
       toast({
-        title: 'Registration successful!',
-        description: 'Please login to continue'
+        title: '🎉 Registered successfully!',
+        description: 'Your account has been created. Please login to continue shopping.'
       })
       
       router.push('/login')

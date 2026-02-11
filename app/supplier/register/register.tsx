@@ -42,8 +42,8 @@ export default function SupplierRegisterPage() {
         password: formData.password,
       })
       toast({
-        title: 'Registration successful!',
-        description: 'Your supplier account is pending approval. You can now login.',
+        title: '🎉 Registration successful!',
+        description: 'Your supplier account has been created. You can now login and start adding products.',
       })
       router.push('/supplier/login')
     } catch (error: any) {

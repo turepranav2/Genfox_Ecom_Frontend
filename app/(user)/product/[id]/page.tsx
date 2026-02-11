@@ -123,14 +123,14 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         <ArrowLeft className="h-4 w-4" /> Back to products
       </Link>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 animate-fade-in-up">
         {/* Image */}
-        <div className="relative aspect-square overflow-hidden rounded-lg bg-card">
+        <div className="relative aspect-square overflow-hidden rounded-lg bg-white transition-transform duration-300 hover:scale-[1.02]">
           <Image
             src={resolveImage(product.images)}
             alt={product.name}
             fill
-            className="object-cover"
+            className="object-contain p-4"
             sizes="(max-width: 768px) 100vw, 50vw"
             priority
           />
@@ -266,12 +266,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                   const pid = p.id || (p as any)._id
                   return (
                   <Link key={pid} href={`/product/${pid}`} className="group">
-                    <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
+                    <div className="relative aspect-square overflow-hidden rounded-md bg-white">
                       <Image 
                         src={resolveImage(p.images)} 
                         alt={p.name} 
                         fill 
-                        className="object-cover transition-transform group-hover:scale-105" 
+                        className="object-contain p-2 transition-transform group-hover:scale-105" 
                         sizes="25vw" 
                       />
                     </div>

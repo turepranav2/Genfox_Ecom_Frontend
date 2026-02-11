@@ -1,0 +1,115 @@
+GENFOX E-COMMERCE — FEATURE REQUIREMENTS & IMPLEMENTATION PLAN
+================================================================
+
+## FEATURE 1: Enhanced UI with Toast/Popup Notifications
+---------------------------------------------------------
+### What's Needed:
+- Success toast popup after USER registration → "Registered successfully! Please login."
+- Success toast popup after SUPPLIER registration → "Registered successfully! You can now login."
+- Success toast popup when adding item to cart → "Added to cart!" with "Go to Cart" action
+- Success toast popup when user profile is updated → "Profile updated successfully!"
+- Success toast popup when supplier profile is updated → "Profile updated successfully!"
+- Use existing shadcn toast + sonner components for consistent UI
+- Add subtle animations/transitions on product cards, page loads
+
+### Files Changed:
+- app/(user)/register/register.tsx — already has toast, verified ✓
+- app/supplier/register/register.tsx — already has toast, verified ✓
+- app/(user)/page.tsx — already has add-to-cart toast, verified ✓
+- app/(user)/product/[id]/page.tsx — already has toast, verified ✓
+- app/(user)/profile/page.tsx — already has toast, verified ✓
+- app/supplier/profile/page.tsx — already has toast, verified ✓
+- Enhanced with better success messages and animations
+
+
+## FEATURE 2: Product Approval System (Admin approves products)
+---------------------------------------------------------------
+### What's Needed:
+- When supplier adds a product, it should have status "PENDING" by default
+- Admin can see all products with their approval status (PENDING / APPROVED / REJECTED)
+- Admin can approve/reject products
+- Only APPROVED products should show on the home page (user-facing)
+- Supplier's product page shows the approval status of each product
+
+### Backend Schema Change Required:
+- Product schema needs a new field:
+    approvalStatus: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'PENDING'
+    }
+
+### Backend API Changes Required:
+- GET /api/products → should only return products with approvalStatus: 'APPROVED'
+  (or add query param ?approvalStatus=APPROVED for public endpoints)
+- GET /api/products/supplier → should return ALL products for that supplier (with approvalStatus)
+- GET /api/admin/products → should return ALL products (with approvalStatus)
+- PUT /api/admin/products/:id/approve → set approvalStatus to 'APPROVED'
+- PUT /api/admin/products/:id/reject → set approvalStatus to 'REJECTED'
+
+### Frontend Changes:
+- admin-api.ts — add approveProduct(), rejectProduct(), getAllProductsAdmin()
+- product-api.ts — add getAdminProducts()
+- app/admin/products/page.tsx — add approve/reject buttons, status filter
+- app/supplier/products/page.tsx — show approval status badge per product
+- app/(user)/page.tsx — already fetches from /api/products (backend filters)
+
+
+## FEATURE 3: Supplier Can Register & Login Without Admin Approval
+------------------------------------------------------------------
+### What's Needed:
+- Supplier can register and login to dashboard freely (no approval gate)
+- Approval from admin is ONLY for products, NOT for supplier account
+- When supplier adds a product → it shows "Awaiting Approval" on supplier dashboard
+- When admin approves product → status updates to "Approved", product appears on home page
+- Revoke button on admin suppliers page = for revoking supplier account (not products)
+- Admin should be able to UNDO a revoke (re-approve supplier)
+
+### Changes:
+- app/supplier/register/register.tsx — update success message (no "pending approval" text)
+- app/supplier/login/page.tsx — no changes needed (already works)
+- app/supplier/products/page.tsx — show approval status per product
+- app/admin/suppliers/page.tsx — revoke = reject supplier, un-revoke = re-approve
+  (already implemented with approve/reject buttons, just clarify button labels)
+
+
+## FEATURE 4: Login/Register Role Selection (User or Supplier)
+--------------------------------------------------------------
+### What's Needed:
+- When someone clicks "Login" in the navbar → show a dialog/modal:
+    "Login as User" | "Login as Supplier"
+- When someone clicks "Sign Up" in the navbar → show a dialog/modal:
+    "Register as User" | "Register as Supplier"
+- When add-to-cart triggers login redirect → go to /login (user login) directly
+- On product detail page, if 401 on add-to-cart → redirect to /login (user login)
+
+### Files Changed:
+- components/user-header.tsx — replace direct links with role-selection dialogs
+- app/(user)/page.tsx — redirect to /login on 401 (already done ✓)
+- app/(user)/product/[id]/page.tsx — redirect to /login on 401 (already done ✓)
+
+
+## BACKEND SCHEMA ADDITIONS SUMMARY
+====================================
+
+### Product Schema — ADD this field:
+  approvalStatus: {
+    type: String,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    default: 'PENDING'
+  }
+
+### New Admin API Routes Needed:
+  PUT /api/admin/products/:id/approve
+  PUT /api/admin/products/:id/reject
+  GET /api/admin/products (returns ALL products regardless of approvalStatus)
+
+### Modified API Routes:
+  GET /api/products → filter: { isActive: true, approvalStatus: 'APPROVED' }
+  GET /api/products/supplier → no filter on approvalStatus (show all for supplier)
+
+### Supplier Schema — No changes needed
+  (status field already exists for supplier account approval/revocation)
+
+================================================================
+END OF FEATURES DOCUMENT

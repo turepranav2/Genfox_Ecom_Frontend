@@ -72,7 +72,7 @@ export default function SupplierProfilePage() {
           bankName: bankName,
         },
       } as any)
-      toast({ title: "Profile updated", description: "Your profile has been saved successfully" })
+      toast({ title: "✅ Profile updated!", description: "Your business details have been saved successfully." })
     } catch (error: any) {
       toast({
         title: "Failed to update profile",

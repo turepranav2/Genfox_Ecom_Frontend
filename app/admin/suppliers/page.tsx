@@ -112,7 +112,7 @@ export default function AdminSuppliersPage() {
           (s.id === supplierId || s._id === supplierId) ? { ...s, status: "APPROVED" } : s
         )
       )
-      toast({ title: "Supplier approved", description: "Supplier can now list products" })
+      toast({ title: "Supplier approved", description: "Supplier account is now active" })
     } catch (error: any) {
       toast({
         title: "Failed to approve",
@@ -133,7 +133,7 @@ export default function AdminSuppliersPage() {
           (s.id === supplierId || s._id === supplierId) ? { ...s, status: "REJECTED" } : s
         )
       )
-      toast({ title: "Supplier rejected", description: "Supplier has been rejected" })
+      toast({ title: "Supplier revoked", description: "Supplier account has been revoked" })
     } catch (error: any) {
       toast({
         title: "Failed to reject",
@@ -435,7 +435,7 @@ export default function AdminSuppliersPage() {
                           disabled={actionLoading === sid}
                         >
                           {actionLoading === sid ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                          Re-Approve
+                          Un-Revoke
                         </Button>
                       )}
                       {status === "APPROVED" && (
