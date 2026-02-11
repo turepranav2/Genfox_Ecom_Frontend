@@ -37,7 +37,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Handle 401 Unauthorized — redirect to the correct login page based on role
-    if (error.response?.status === 401) {
+    // BUT skip redirect for login endpoints (401 there means wrong credentials, not expired session)
+    const requestUrl = error.config?.url || ''
+    const isLoginRequest =
+      requestUrl.includes('/login') ||
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/register')
+
+    if (error.response?.status === 401 && !isLoginRequest) {
       const role = localStorage.getItem('userRole')
       localStorage.removeItem('token')
       localStorage.removeItem('userRole')
